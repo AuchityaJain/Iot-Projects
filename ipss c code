@@ -1,0 +1,118 @@
+#include <WiFi.h>
+#include <WiFiClientSecure.h>
+#include <UniversalTelegramBot.h>
+#include <TinyGPS++.h>
+#include <HardwareSerial.h>
+#include <Wire.h>
+#include <Adafruit_MPU6050.h>
+#include <Adafruit_Sensor.h>
+#include <math.h>
+
+// WiFi Credentials
+const char* ssid = "Library";
+const char* password = "nmitlib@123";
+
+// Telegram Bot credentials
+#define BOT_TOKEN "7673124102:AAGpXXl8tzumo_HE_zg44wsj4TLxFPS7iMs"
+#define CHAT_ID "8198560519"
+
+// --- CURRENT COORDINATES (Bengaluru, Karnataka, India) ---
+const double currentLatitude = 12.9716;
+const double currentLongitude = 77.5946;
+// -------------------------------------------------------
+
+WiFiClientSecure client;
+UniversalTelegramBot bot(BOT_TOKEN, client);
+
+// GPS and MPU6050
+TinyGPSPlus gps;
+HardwareSerial gpsSerial(1); // UART1 for GPS
+Adafruit_MPU6050 mpu;
+
+// Pins
+const int buttonPin = 12;
+const int buzzerPin = 13;
+
+bool sosSent = false;
+unsigned long lastMsgTime = 0;
+
+void sendSOS() {
+  String message = "!!! SOS Alert !!!\n";
+
+  if (gps.location.isValid()) {
+    message += "Location:\n";
+    message += "https://maps.google.com/?q=";
+    message += String(gps.location.lat(), 6);
+    message += ",";
+    message += String(gps.location.lng(), 6);
+  } else {
+    message += "Location: Sending current estimated location:\n";
+    message += "https://maps.google.com/?q=";
+    message += String(currentLatitude, 6);
+    message += ",";
+    message += String(currentLongitude, 6);
+    Serial.println("using current coordinates.");
+  }
+
+  bot.sendMessage(CHAT_ID, message, "");
+  digitalWrite(buzzerPin, HIGH);
+  lastMsgTime = millis();  // Start buzzer timing
+  Serial.println("SOS sent!");
+}
+
+void setup() {
+  Serial.begin(115200);
+  gpsSerial.begin(9600, SERIAL_8N1, 16, 17);  // RX, TX for GPS
+
+  pinMode(buttonPin, INPUT_PULLUP);
+  pinMode(buzzerPin, OUTPUT);
+  digitalWrite(buzzerPin, LOW);
+
+  Wire.begin();
+  if (!mpu.begin()) {
+    Serial.println("MPU6050 not found. Check wiring.");
+    while (1);
+  }
+
+  WiFi.begin(ssid, password);
+  client.setInsecure(); // Insecure SSL (okay for Telegram Bot)
+  Serial.print("Connecting to WiFi");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nWiFi connected");
+}
+
+void loop() {
+  // Read GPS
+  while (gpsSerial.available()) {
+    gps.encode(gpsSerial.read());
+  }
+
+  // Read MPU6050 acceleration
+  sensors_event_t a, g, temp;
+  mpu.getEvent(&a, &g, &temp);
+
+  float acc = sqrt(a.acceleration.x * a.acceleration.x +
+                    a.acceleration.y * a.acceleration.y +
+                    a.acceleration.z * a.acceleration.z);
+
+  bool fallDetected = acc > 25.0;
+  bool buttonPressed = digitalRead(buttonPin) == LOW;
+
+  if ((fallDetected || buttonPressed) && !sosSent) {
+    Serial.println("Trigger detected: sending SOS...");
+    sosSent = true;
+    sendSOS();
+  }
+
+  // Turn off buzzer after 10 sec
+  if (sosSent && millis() - lastMsgTime > 10000) {
+    digitalWrite(buzzerPin, LOW);
+    sosSent = false;
+    Serial.println("SOS reset.");
+  }
+
+  delay(100);
+}
