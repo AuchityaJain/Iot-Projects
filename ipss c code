@@ -9,12 +9,12 @@
 #include <math.h>
 
 // WiFi Credentials
-const char* ssid = "Library";
-const char* password = "nmitlib@123";
+const char* ssid = "ssid";
+const char* password = "password";
 
 // Telegram Bot credentials
-#define BOT_TOKEN "7673124102:AAGpXXl8tzumo_HE_zg44wsj4TLxFPS7iMs"
-#define CHAT_ID "8198560519"
+#define BOT_TOKEN "bot id"
+#define CHAT_ID "chat id"
 
 // --- CURRENT COORDINATES (Bengaluru, Karnataka, India) ---
 const double currentLatitude = 12.9716;
